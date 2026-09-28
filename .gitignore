@@ -1,0 +1,11 @@
+.DS_Store
+.local/
+.env
+.env.*
+*.log
+dist/
+macos/.cache/
+node_modules/
+submission/artifacts/
+*.dmg
+*.zip
