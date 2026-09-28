@@ -119,3 +119,26 @@ test('Codex는 npm 대신 버전별 공식 릴리스로 연결하고 원문은 H
  const html=run('ui.notes.set("npm:@openai/codex:0.157.1",{status:"available",body:"<script>alert(1)</script>"}); notesSection({source:"npm",target:"@openai/codex",version:"0.157.1"})');
  assert.match(html,/&lt;script&gt;/);assert.ok(!html.includes('<script>'));
 });
+
+test('업데이트 대상이 없어지면 빈 선택 화면 대신 복귀 안내를 표시',()=>{
+ const run=harness([]);
+ const html=run('ui.view="update-select";render();$("screen").innerHTML');
+ assert.match(html,/업데이트할 수 있는 항목이 없어요/);
+ assert.match(html,/모니터링으로/);
+ assert.doesNotMatch(html,/0개 업데이트|전체 해제/);
+});
+test('재시도할 수 없는 실패는 상세 확인으로 연결하고 빈 재선택을 제공하지 않음',()=>{
+ const run=harness([{id:'failed',name:'Easydict',source:'homebrew',target:'cask/easydict',hours:6,status:'error',canUpdate:false,update:{version:'2'}}]);
+ const html=run('model.updateBatch={running:false,items:[{id:"failed",name:"Easydict",status:"failed",error:"설치 위치를 확인하지 못했어요."}]};ui.view="update-progress";render();$("screen").innerHTML');
+ assert.match(html,/data-detail="failed"/);
+ assert.match(html,/상세 확인/);
+ assert.doesNotMatch(html,/data-action="update-retry"/);
+});
+test('목록에서 빼기는 페이지와 검색을 바꿔도 선택을 유지하고 업데이트 중 항목은 선택 불가',()=>{
+ const run=harness(fixtures.slice(0,6));
+ const html=run('ui.removeChosen=new Set(["0","5"]);model.updatingId="1";ui.view="list-edit";render();$("screen").innerHTML');
+ assert.match(html,/2개 빼기/);assert.match(html,/data-remove-select=/);assert.doesNotMatch(html,/data-remove=/);
+ run('ui.monitorPage=2;render();ui.monitorQuery="Tool 100";render();0');
+ assert.deepEqual(run('[...ui.removeChosen]'),['0','5']);
+ assert.equal(run('canRemove(model.watches[1])'),false);
+});

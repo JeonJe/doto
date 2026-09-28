@@ -12,6 +12,8 @@ test('일괄 업데이트: 사전 검증, 중복 실행 방지, 순차 실행, �
   const concurrent=await Promise.all(Array.from({length:4},()=>post({action:'update-many',ids:['npm-success','npm-failure','brew-success']})));
   assert.equal(concurrent.filter(r=>r.status===200).length,1);assert.equal(concurrent.filter(r=>r.status===409).length,3);
   assert.equal((await post({action:'remove',id:'brew-success'})).status,409);
+  assert.equal((await post({action:'remove-many',ids:['news','brew-success']})).status,409);
+  assert.ok((await get()).watches.some(w=>w.id==='news'));
   let state;for(let i=0;i<100;i++){state=await get();if(!state.updateBatch?.running)break;await new Promise(r=>setTimeout(r,50));}
   assert.equal(state.updateBatch.running,false);assert.deepEqual(state.updateBatch.items.map(i=>i.status),['succeeded','failed','succeeded']);
   assert.equal(state.watches[0].installedVersion,'2.0.0');assert.equal(state.watches[0].update,null);assert.ok(state.watches[1].update);assert.ok(state.watches[3].update);

@@ -358,6 +358,12 @@ const server = http.createServer(async (req, res) => {
           if (!preset) throw failure('추가할 항목을 확인해 주세요.');
           addWatch({ ...preset, hours });
         }
+      } else if(data.action==='remove-many'){
+        const ids=new Set(batchIds(data.ids));
+        const watches=[...ids].map(watchById);
+        if(watches.some(w=>w.id===updatingId||(state.updateBatch?.running&&state.updateBatch.items.some(item=>item.id===w.id))))throw failure('업데이트가 끝난 뒤 변경해 주세요.',409);
+        state.watches=state.watches.filter(w=>!ids.has(w.id));
+        state.notifications=state.notifications.filter(n=>!ids.has(n.watchId)||n.demo);
       } else if (data.action === 'schedule' || data.action === 'remove') {
         const watch = watchById(data.id);
         if (watch.id === updatingId || (state.updateBatch?.running && state.updateBatch.items.some(item=>item.id===watch.id))) throw failure('업데이트가 끝난 뒤 변경해 주세요.', 409);

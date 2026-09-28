@@ -103,3 +103,5 @@ body{background-color:#f5f0e9;background-image:radial-gradient(#dfd4c6 .7px,tran
 .installation-location p,.location-path{font-size:12px;overflow-wrap:anywhere;line-height:1.6}
 .installation-location .secondary{font-size:12px;padding:6px 10px}
 .location-options{display:grid;gap:9px}.location-options .preset-row{margin:0}
+
+.edit-watch-row input{width:18px;height:18px;accent-color:var(--green);flex-shrink:0}.remove-review{padding-left:22px;line-height:2;overflow-wrap:anywhere}.edit-watch-row:has(input:disabled){opacity:.6}
