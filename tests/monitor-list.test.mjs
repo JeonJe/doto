@@ -142,3 +142,11 @@ test('목록에서 빼기는 페이지와 검색을 바꿔도 선택을 유지�
  assert.deepEqual(run('[...ui.removeChosen]'),['0','5']);
  assert.equal(run('canRemove(model.watches[1])'),false);
 });
+
+test('같은 목록의 상태 갱신은 내부 스크롤을 유지하고 페이지 변경은 맨 위에서 시작',()=>{
+ const run=harness(fixtures.slice(0,6));
+ run('ui.view="home";render();$("monitor-list").scrollTop=80;model.watches[0].status="waiting";render();0');
+ assert.equal(run('$("monitor-list").scrollTop'),80);
+ run('ui.monitorPage=2;render();0');
+ assert.equal(run('$("monitor-list").scrollTop'),0);
+});
