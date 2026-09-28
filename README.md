@@ -63,4 +63,14 @@ Codex가 모니터링 목록에 추가됐습니다. 새 버전이 없으면 조�
 
 **설치 파일 공개를 준비하고 있어요.** 현재는 소스와 시연 화면을 공개하며, 다른 맥에서의 첫 실행 확인이 남아 있습니다.
 
-소스에서 직접 실행하려면 [개발 안내](docs/DEVELOPMENT.md)를 참고하세요.
+macOS 13 이상에서 Xcode Command Line Tools가 설치되어 있다면, 터미널에 아래 세 줄을 붙여넣으세요. 처음에는 인터넷 연결이 필요합니다.
+
+```sh
+git clone https://github.com/JeonJe/doto.git &&
+cd doto &&
+bash macos/build.sh && open dist/Doto.app
+```
+
+빌드가 끝나면 도토가 열려요. 다음부터는 `doto/dist/Doto.app`을 더블클릭하면 됩니다.
+
+개발자 도구 설치와 테스트 방법은 [개발 안내](docs/DEVELOPMENT.md)를 확인하세요.

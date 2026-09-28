@@ -2,18 +2,38 @@
 
 도토의 빌드, 검사와 구현 구조를 설명합니다. 앱 소개와 사용 흐름은 [README](../README.md)를 확인하세요.
 
-## 소스에서 빌드하고 검사하기
+## 실행하기
 
-필수 환경은 macOS 13 이상, Xcode Command Line Tools와 인터넷 연결입니다. 이 저장소를 복제한 뒤 아래 명령을 실행하세요. 첫 빌드에서 공식 Node 22.23.3을 다운로드하고 SHA-256을 검증합니다. npm 의존성 설치는 없습니다.
+macOS 13 이상, Xcode Command Line Tools와 인터넷 연결이 필요해요. 터미널에 아래 세 줄을 붙여넣으면 빌드 후 도토가 열립니다.
 
 ```sh
-git clone https://github.com/JeonJe/doto.git
-cd doto
-bash macos/build.sh
+git clone https://github.com/JeonJe/doto.git &&
+cd doto &&
+bash macos/build.sh && open dist/Doto.app
+```
+
+다음부터는 `doto/dist/Doto.app`을 더블클릭하면 돼요. Node나 npm 패키지를 따로 설치할 필요는 없습니다.
+
+<details>
+<summary>Xcode Command Line Tools가 없다면</summary>
+
+아래 명령으로 설치 창을 열고, 설치를 마친 뒤 위 실행 명령을 입력하세요.
+
+```sh
+xcode-select --install
+```
+
+</details>
+
+## 검사하기 (선택)
+
+앱을 실행하는 데 테스트는 필요하지 않아요. 코드를 변경했다면 저장소 폴더에서 실행하세요. 검사는 임시 데이터와 가짜 설치 도구를 사용하며 사용자 패키지를 업데이트하지 않습니다.
+
+```sh
 ./dist/Doto.app/Contents/Resources/runtime/node --test tests/*.test.mjs
 ```
 
-빌드된 `dist/Doto.app`을 Finder에서 열어 실행하세요. 검사는 임시 데이터와 가짜 설치 도구를 사용하며 사용자 패키지를 업데이트하지 않습니다.
+## 설치 파일 만들기 (선택)
 
 설치 파일을 만들려면 다음 명령을 실행합니다.
 
@@ -28,6 +48,8 @@ bash submission/verify-mac.sh dist/Doto.app
 ```
 
 이 검사는 Finder 최초 실행, macOS 보안 승인, 다른 맥 실기 검증을 대신하지 않습니다.
+
+첫 빌드에서 공식 Node 22.23.3을 다운로드하고 SHA-256을 검증합니다. 런타임은 앱에 포함되며 npm 의존성 설치는 없습니다.
 
 ## 지원 범위와 데이터
 
