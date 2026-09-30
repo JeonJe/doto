@@ -60,7 +60,7 @@ test('상태별 필터는 빠짐과 중복 없이 전체 개수와 일치하고 
   for(const group of ['updates','unchanged','errors'])ids.push(...run('ui.monitorFilter="'+group+'"; monitorResults().items.map(w=>w.id)'));
   assert.equal(ids.length,7);assert.equal(new Set(ids).size,7);
   assert.equal(run('watchStatus(model.watches[1])'),'새 버전 없음');
-  assert.equal(run('watchStatus(model.watches[2])'),'새 버전 없음');
+  assert.equal(run('watchStatus(model.watches[2])'),'구독 중');
   assert.equal(run('watchStatus(model.watches[3])'),'확인 필요');
 });
 
@@ -149,4 +149,10 @@ test('같은 목록의 상태 갱신은 내부 스크롤을 유지하고 페이�
  assert.equal(run('$("monitor-list").scrollTop'),80);
  run('ui.monitorPage=2;render();0');
  assert.equal(run('$("monitor-list").scrollTop'),0);
+});
+
+test('연결되지 않은 GitHub 상세는 설치 최신 상태가 아닌 릴리스 구독으로 안내',()=>{
+ const run=harness([{id:'repo',name:'Repo',source:'github',target:'example/repo',version:'v1.2.3',status:'ok',hours:6,installedVersion:null}]);
+ const html=run('ui.detail="repo";ui.view="detail";render();$("screen").innerHTML');
+ assert.match(html,/릴리스 소식 구독/);assert.match(html,/최근 릴리스/);assert.doesNotMatch(html,/새 버전이 없어요/);
 });

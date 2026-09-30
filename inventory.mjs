@@ -97,3 +97,24 @@ export async function commandLocations(command,run){
   }
   return locations;
 }
+
+const desktopApps = [{repo:'stablyai/orca',name:'Orca',bundleId:'com.stablyai.orca',fileName:'Orca.app'}];
+export function desktopAppFor(watch){
+  return watch.source==='github'?desktopApps.find(app=>app.repo===watch.target.toLowerCase()):undefined;
+}
+export async function desktopAppLocations(watch,run,roots){
+  const app=desktopAppFor(watch);if(!app)return [];
+  const locations=[],seen=new Set();
+  for(const root of roots){
+    const application=path.join(root,app.fileName),plist=path.join(application,'Contents','Info.plist');
+    let resolved;
+    try{resolved=await realpath(application);await access(plist);}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))continue;throw error;}
+    if(seen.has(resolved))continue;seen.add(resolved);
+    const metadata=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',plist],'',5000));
+    if(metadata.CFBundleIdentifier!==app.bundleId)continue;
+    const version=String(metadata.CFBundleShortVersionString||'').replace(/^v/,'');
+    if(!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version))throw new Error(`${app.name}의 설치 버전을 읽지 못했어요.`);
+    locations.push({id:`app:${resolved}`,path:resolved,version});
+  }
+  return locations;
+}

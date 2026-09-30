@@ -55,6 +55,8 @@ bash submission/verify-mac.sh dist/Doto.app
 
 설치 목록은 Homebrew 공식 core/cask와 PATH에서 찾은 npm 전역 패키지를 사용합니다. 일반 macOS 앱 전체와 별도 Homebrew tap, PATH 밖의 설치는 탐색하지 않습니다. CLI 또는 npm 설치 위치가 여러 개면 사용자가 하나를 고릅니다.
 
+GitHub의 `stablyai/orca` 주소는 `/Applications/Orca.app`과 `~/Applications/Orca.app`의 번들 식별자를 확인해 설치 버전과 비교합니다. 여러 위치에 있으면 사용할 위치를 선택해 주세요. 업데이트 적용은 Orca에서 진행합니다. 그 밖의 GitHub 저장소는 릴리스 소식 구독이며, 로컬 설치 버전과 비교하지 않습니다.
+
 업데이트는 수동으로 실행합니다. 앱 종료와 맥 잠자기 중에는 확인하지 않으며 로그인 시 자동 실행은 제공하지 않습니다. 실제 패키지 업데이트에는 설치 관리자와 권한이 필요합니다.
 
 데이터는 `~/Library/Application Support/MomoPrototype`에 저장됩니다. 기존 데이터와 설정의 호환성을 위해 내부 식별자와 데이터 경로를 유지했습니다.
