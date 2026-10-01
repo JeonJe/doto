@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { readFile, readdir, access, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import {repositoryKey} from './local-tools.mjs';
 
 const validNpm = /^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/;
 const validBrew = /^[a-z0-9][a-z0-9+@._-]*$/;
@@ -11,11 +12,11 @@ export function brewItems(data) {
     if(f.tap!=='homebrew/core'||!validBrew.test(f.name))continue;
     const installed=f.installed?.find(i=>i.installed_on_request===true&&i.version===f.linked_keg)||f.installed?.filter(i=>i.installed_on_request===true).at(-1);
     if(!installed||!installed.version||installed.version.startsWith('HEAD'))continue;
-    items.push({id:`homebrew:formula/${f.name}`,source:'homebrew',target:`formula/${f.name}`,name:f.name,manager:'Homebrew',installedVersion:installed.version});
+    items.push({id:`homebrew:formula/${f.name}`,source:'homebrew',target:`formula/${f.name}`,name:f.name,manager:'Homebrew',installedVersion:installed.version,repository:repositoryKey(f.homepage)});
   }
   for(const c of data.casks||[]) {
     if(c.tap!=='homebrew/cask'||!validBrew.test(c.token)||typeof c.installed!=='string'||!c.installed||c.version==='latest')continue;
-    items.push({id:`homebrew:cask/${c.token}`,source:'homebrew',target:`cask/${c.token}`,name:c.name?.[0]||c.token,manager:'Homebrew',installedVersion:c.installed});
+    items.push({id:`homebrew:cask/${c.token}`,source:'homebrew',target:`cask/${c.token}`,name:c.name?.[0]||c.token,manager:'Homebrew',installedVersion:c.installed,repository:repositoryKey(c.homepage)});
   }
   return items;
 }
@@ -33,7 +34,7 @@ export async function npmItems(root) {
     try {
       const pkg=JSON.parse(await readFile(path.join(root,relative,'package.json'),'utf8'));
       if(!validNpm.test(pkg.name)||typeof pkg.version!=='string'||!pkg.version)continue;
-      items.push({id:`npm:${pkg.name}`,source:'npm',target:pkg.name,name:pkg.name,manager:'npm',installedVersion:pkg.version,noticePackage:pkg.name==='claude'&&!pkg.bin&&String(pkg.repository?.url||'').includes('bcherny/redirect-claude')});
+      items.push({id:`npm:${pkg.name}`,source:'npm',target:pkg.name,name:pkg.name,manager:'npm',installedVersion:pkg.version,repository:repositoryKey(typeof pkg.repository==='string'?pkg.repository:pkg.repository?.url),noticePackage:pkg.name==='claude'&&!pkg.bin&&String(pkg.repository?.url||'').includes('bcherny/redirect-claude')});
     }catch(error){if(!['ENOENT','ENOTDIR'].includes(error.code)&&!(error instanceof SyntaxError))throw error;}
   }
   return items;
@@ -94,27 +95,6 @@ export async function commandLocations(command,run){
     let version=null;
     try{version=(await run(executable,['--version'],'',8000,false,{env:{PATH:directory+path.delimiter+process.env.PATH}})).match(/\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/)?.[0]||null;}catch{}
     locations.push({id:`cli:${executable}`,path:executable,version});
-  }
-  return locations;
-}
-
-const desktopApps = [{repo:'stablyai/orca',name:'Orca',bundleId:'com.stablyai.orca',fileName:'Orca.app'}];
-export function desktopAppFor(watch){
-  return watch.source==='github'?desktopApps.find(app=>app.repo===watch.target.toLowerCase()):undefined;
-}
-export async function desktopAppLocations(watch,run,roots){
-  const app=desktopAppFor(watch);if(!app)return [];
-  const locations=[],seen=new Set();
-  for(const root of roots){
-    const application=path.join(root,app.fileName),plist=path.join(application,'Contents','Info.plist');
-    let resolved;
-    try{resolved=await realpath(application);await access(plist);}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))continue;throw error;}
-    if(seen.has(resolved))continue;seen.add(resolved);
-    const metadata=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',plist],'',5000));
-    if(metadata.CFBundleIdentifier!==app.bundleId)continue;
-    const version=String(metadata.CFBundleShortVersionString||'').replace(/^v/,'');
-    if(!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version))throw new Error(`${app.name}의 설치 버전을 읽지 못했어요.`);
-    locations.push({id:`app:${resolved}`,path:resolved,version});
   }
   return locations;
 }

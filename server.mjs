@@ -3,9 +3,9 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { createInventory, nameOrder, compareBrewVersions, commandLocations, desktopAppFor, desktopAppLocations } from './inventory.mjs';
+import {appChoices,readLocalTool,compareReleaseVersions} from './local-tools.mjs';
+import { createInventory, nameOrder, compareBrewVersions, commandLocations } from './inventory.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 let port = Number(process.env.MOMO_PORT || 4317);
@@ -66,7 +66,7 @@ async function presetStatuses(force = false) {
 }
 async function publicState() {
   const { schedule: legacySchedule, provider: legacyProvider, ...rest } = state;
-  return { ...rest, watches: state.watches.filter(w => !w.demo).map(w => ({ ...w, name:desktopAppFor(w)&&w.name===w.target?desktopAppFor(w).name:w.name, localApp:desktopAppFor(w)?.name||null, canUpdate: canUpdate(w), guide: presetFor(w)?.guide || null })), notifications: state.notifications.filter(n => !n.demo), checking, updatingId, presets: await presetStatuses() };
+  return { ...rest, watches: state.watches.filter(w => !w.demo).map(w => ({ ...w, localApp:w.localBinding?.name||null, monitorMode:w.releaseOnly?'release':(w.localBinding||w.installation||w.installedVersion)?'installation':'release', canUpdate: canUpdate(w), guide: presetFor(w)?.guide || null })), notifications: state.notifications.filter(n => !n.demo), checking, updatingId, presets: await presetStatuses() };
 }
 async function installedCatalog(force=false) {
   const catalog=await scanInstalled(force);
@@ -113,11 +113,11 @@ function addWatch(action) {
   if (state.watches.some(w => !w.demo && w.source === action.source && w.target === action.target)) throw failure('이미 모니터링 중인 항목이에요.', 409);
   if (state.watches.filter(w => !w.demo).length >= 100) throw failure('최대 100개까지 모니터링할 수 있어요.', 409);
   const preset = presetFor(action);
-  const watch = { id: randomUUID(), name: action.name.trim(), source: action.source, target: action.target, hours: action.hours, icon: preset?.icon || '⌘', ...(action.installation?{installation:action.installation}:{}), demo: false, version: null, installedVersion: null, lastCheck: null, nextCheck: now(), status: 'waiting', error: null };
+  const watch = { id: randomUUID(), name: action.name.trim(), source: action.source, target: action.target, hours: action.hours, icon: preset?.icon || '⌘', ...(action.installation?{installation:action.installation}:{}), ...(action.localBinding?{localBinding:action.localBinding}:{}), ...(action.selectedLocationId?{selectedLocationId:action.selectedLocationId}:{}), releaseOnly:!!action.releaseOnly, demo: false, version: null, installedVersion: null, lastCheck: null, nextCheck: now(), status: 'waiting', error: null };
   state.watches.push(watch); state.onboarded = true; return watch;
 }
 function canUpdate(watch) {
-  if (watch.installationIssue || !watch.installedVersion || watch.demo || watch.comparisonUnknown || (watch.source==='npm' && watch.target==='claude')) return false;
+  if (watch.localBinding || watch.releaseOnly || watch.installationIssue || !watch.installedVersion || watch.demo || watch.comparisonUnknown || (watch.source==='npm' && watch.target==='claude')) return false;
   if (!watch.installation) return !!presetFor(watch)?.updateArgs;
   return (watch.source==='npm' && watch.installation.manager==='npm' && watch.installation.id===`npm:${watch.target}`) ||
     (watch.source==='homebrew' && watch.installation.manager==='Homebrew' && watch.installation.id===`homebrew:${watch.target}`);
@@ -222,19 +222,40 @@ async function releaseInfo(watch) {
   if (typeof version !== 'string' || version === 'latest' || version.length > 100) throw failure('버전 정보를 읽지 못했어요.', 502);
   return { version, releaseNotes: typeof data.body === 'string' ? data.body.slice(0, 5000) : null };
 }
+async function connectionChoices(target){
+  const catalog=await installedCatalog();
+  const packages=catalog.items.flatMap(item=>(item.locations||[{id:item.id,path:`${item.manager} / ${item.target}`,version:item.installedVersion}]).map(location=>({name:item.name,caption:location.path,version:location.version,recommended:target.source==='npm'?item.source==='npm'&&item.target===target.target:item.repository===target.target.toLowerCase(),binding:{kind:'package',id:item.id,locationId:location.id}})));
+  const apps=await appChoices();
+  const slug=target.target.split('/').at(-1).replace(/[^a-z0-9]/gi,'').toLowerCase();
+  return [...packages,...apps.map(app=>({...app,recommended:app.name.replace(/[^a-z0-9]/gi,'').toLowerCase()===slug}))].sort((a,b)=>Number(b.recommended)-Number(a.recommended)||a.name.localeCompare(b.name,'ko'));
+}
+async function resolveConnection(binding){
+  if(binding?.kind==='package'){
+    const item=(await installedCatalog()).items.find(item=>item.id===binding.id);
+    if(!item)throw failure('설치된 패키지를 찾지 못했어요. 다시 선택해 주세요.',404);
+    const locations=item.locations||[{id:item.id,path:`${item.manager} / ${item.target}`,version:item.installedVersion}];
+    const location=locations.find(location=>location.id===binding.locationId);
+    if(!location)throw failure('설치 위치를 다시 선택해 주세요.',409);
+    return {name:item.name,installedVersion:location.version,installation:{id:item.id,manager:item.manager},selectedLocationId:location.id,binding:{kind:'package',id:item.id,locationId:location.id}};
+  }
+  try{const local=await readLocalTool(binding,run);return {name:local.binding.name,installedVersion:local.version,localBinding:local.binding,selectedLocationId:local.id,binding:local.binding};}
+  catch(error){throw failure(error.code==='ENOENT'?'설치 경로를 찾지 못했어요.':error.code==='EACCES'?'설치 경로를 읽을 수 없어요.':error.message,400);}
+}
 async function previewTarget(input) {
   const target = parseTarget(input);
   if (state.watches.some(w => !w.demo && w.source === target.source && w.target.toLowerCase() === target.target.toLowerCase())) throw failure('이미 모니터링 중인 항목이에요.', 409);
-  const release = await releaseInfo(target), preset = presetFor(target), app=desktopAppFor(target);
-  const probe={...target,isPresetProbe:true};
-  const local=app?await installedVersion(probe):null;
-  return { ...target, installedVersion:local, name: app?.name || preset?.name || target.target, icon: preset?.icon || '⌘', version: release.version, input: target.source === 'github' ? `https://github.com/${target.target}` : target.target };
+  const release = await releaseInfo(target), preset = presetFor(target);
+  const candidates=await connectionChoices(target);
+  const matches=candidates.filter(item=>item.recommended&&item.binding.kind==='package');
+  const automatic=target.source==='npm'&&matches.length===1?await resolveConnection(matches[0].binding):null;
+  return { ...target, ...(automatic||{}), name:automatic?.name||preset?.name||target.target, icon:preset?.icon||'⌘', version:release.version, candidates, input:target.source==='github'?`https://github.com/${target.target}`:target.target };
 }
 let checking = false;
 async function installationOptions(watch,force=false){
-  if(desktopAppFor(watch)){
-    const roots=process.env.MOMO_APPLICATIONS_DIR?[process.env.MOMO_APPLICATIONS_DIR]:[path.join(homedir(),'Applications'),'/Applications'];
-    return desktopAppLocations(watch,run,roots.filter(path.isAbsolute));
+  if(watch.releaseOnly)return [];
+  if(watch.localBinding){
+    try{return [await readLocalTool(watch.localBinding,run)];}
+    catch(error){watch.installedVersion=null;watch.installationIssue='연결한 설치 도구를 읽지 못했어요. 다시 연결해 주세요.';throw failure(watch.installationIssue,409);}
   }
   if(watch.installation){
     const catalog=await scanInstalled(force);
@@ -258,9 +279,14 @@ async function selectedInstallation(watch,force=false){
 }
 async function installedVersion(watch,force=false){return (await selectedInstallation(watch,force))?.version||null;}
 async function inspectSavedInstallations(){
-  await Promise.all(state.watches.filter(w=>!w.demo&&(w.installation||presetFor(w)||desktopAppFor(w))).map(async watch=>{
-    try{watch.installedVersion=await installedVersion(watch);if(desktopAppFor(watch)&&watch.version){compareWatchVersion(watch,watch.version,watch.installedVersion);}if(watch.installedVersion&&watch.update?.version===watch.installedVersion){watch.update=null;state.notifications=state.notifications.filter(n=>n.watchId!==watch.id);}}
-    catch(error){watch.status='error';watch.error=error.message;}
+  await Promise.all(state.watches.filter(w=>!w.demo&&(w.installation||w.localBinding||w.selectedLocationId?.startsWith('app:')||presetFor(w))).map(async watch=>{
+    try{
+      if(!watch.localBinding&&!watch.installation&&watch.selectedLocationId?.startsWith('app:')){
+        const local=await readLocalTool({kind:'app',path:watch.selectedLocationId.slice(4)},run);watch.localBinding=local.binding;watch.name=local.binding.name;
+      }
+      watch.installedVersion=await installedVersion(watch);
+      if(watch.version)compareWatchVersion(watch,watch.version,watch.installedVersion);
+    }catch(error){watch.installedVersion=null;watch.status='error';watch.error=error.message;}
   }));
   await save();
 }
@@ -275,12 +301,12 @@ function newerStableRelease(latest, installed) {
 }
 function compareWatchVersion(watch,version,local){
   const before = local || watch.version;
-  const comparison = local && watch.source==='homebrew' ? compareBrewVersions(version,local) : null;
-  watch.comparisonUnknown = !!local && ((watch.source==='homebrew' && comparison===null)||(!!desktopAppFor(watch)&&!/^v?\d+\.\d+\.\d+$/.test(version)));
-  const changed = local ? (watch.source==='homebrew' ? comparison===1 || (comparison===null && !!watch.version && watch.version!==version) : newerStableRelease(version, local)) : !!watch.version && watch.version !== version;
+  const comparison = local ? (watch.source==='homebrew'?compareBrewVersions(version,local):compareReleaseVersions(version,local)) : null;
+  watch.comparisonUnknown = !!local && comparison===null;
+  const changed = local ? comparison===1 : !!watch.version && watch.version !== version;
   if (changed && watch.acknowledgedVersion !== version && watch.update?.version !== version) {
     watch.update = { before: watch.update?.before || before, version, at: now() };
-    state.notifications.push({ id: randomUUID(), watchId: watch.id, name: desktopAppFor(watch)?.name || watch.name, version, before, at: now(), demo: false });
+    state.notifications.push({ id: randomUUID(), watchId: watch.id, name: watch.name, version, before, at: now(), demo: false });
     state.notifications = state.notifications.slice(-30);
   }
   if (local && !changed && !watch.comparisonUnknown && watch.update) {
@@ -328,6 +354,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/api/installed/preview-batch') {const data=await body(req);return send(res,200,{items:await previewInstalledBatch(data.ids)});}
     if (req.method === 'POST' && req.url === '/api/installed/preview') {const data=await body(req);return send(res,200,await previewInstalled(data.id));}
     if (req.method === 'POST' && req.url === '/api/presets/preview-batch') {const data=await body(req);return send(res,200,{items:await previewPresets(data.ids)});}
+    if(req.method==='POST'&&req.url==='/api/connections'){const data=await body(req);return send(res,200,{items:await connectionChoices(data.id?watchById(data.id):parseTarget(data.input))});}
+    if(req.method==='POST'&&req.url==='/api/connection-preview'){const data=await body(req);return send(res,200,await resolveConnection(data.binding));}
     if (req.method === 'POST' && req.url === '/api/preview') { const data = await body(req); return send(res, 200, await previewTarget(data.input)); }
     if (req.method === 'POST' && req.url === '/api/onboarding') {
       const data = await body(req);
@@ -339,7 +367,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && req.url === '/api/manage') {
       const data = await body(req);
-      if(data.action==='select-location'){
+      if(data.action==='bind-installation'){
+        if(checking||updatingId||state.updateBatch?.running)throw failure('진행 중인 작업이 끝난 뒤 연결해 주세요.',409);
+        const watch=watchById(data.id),connection=await resolveConnection(data.binding);
+        if(checking||updatingId||state.updateBatch?.running||!state.watches.includes(watch))throw failure('목록이 바뀌었어요. 다시 시도해 주세요.',409);
+        delete watch.installation;delete watch.localBinding;delete watch.acknowledgedVersion;
+        Object.assign(watch,{name:connection.name,installation:connection.installation,localBinding:connection.localBinding,selectedLocationId:connection.selectedLocationId,installedVersion:connection.installedVersion,releaseOnly:false,update:null,installationIssue:null,status:'ok',error:null});
+        state.notifications=state.notifications.filter(n=>n.watchId!==watch.id);if(watch.version)compareWatchVersion(watch,watch.version,watch.installedVersion);
+      }else if(data.action==='select-location'){
         if(checking||updatingId)throw failure('진행 중인 작업이 끝난 뒤 선택해 주세요.',409);
         const watch=watchById(data.id),locations=await installationOptions(watch,true);
         if(checking||updatingId)throw failure('진행 중인 작업이 끝난 뒤 선택해 주세요.',409);
@@ -363,7 +398,12 @@ const server = http.createServer(async (req, res) => {
       } else if (data.action === 'add') {
         const hours = hoursValue(data.hours);
         if(data.installedId!==undefined) addWatch({...await previewInstalled(data.installedId),hours});
-        else if (data.input !== undefined) addWatch({ ...await previewTarget(data.input), hours });
+        else if (data.input !== undefined){
+          const preview=await previewTarget(data.input);
+          const connection=data.binding?await resolveConnection(data.binding):preview.binding&&!data.releaseOnly?await resolveConnection(preview.binding):{};
+          const {installation,localBinding,selectedLocationId,...remote}=preview;
+          addWatch({...remote,...connection,hours,releaseOnly:!!data.releaseOnly});
+        }
         else {
           const preset = PRESETS.find(p => p.id === data.presetId);
           if (!preset) throw failure('추가할 항목을 확인해 주세요.');
