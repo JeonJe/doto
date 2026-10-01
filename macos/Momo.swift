@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import UniformTypeIdentifiers
 
 final class PetPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -267,6 +268,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         switch action {
         case "hide": hidePet()
         case "show": showPet()
+        case "chooseLocalTool":
+            guard let kind = body["kind"] as? String, ["app", "cli"].contains(kind) else { return }
+            let dialog = NSOpenPanel()
+            dialog.canChooseDirectories = false
+            dialog.canChooseFiles = true
+            dialog.allowsMultipleSelection = false
+            dialog.allowedContentTypes = kind == "app" ? [.applicationBundle] : [.item]
+            dialog.prompt = "연결"
+            if kind == "app" { dialog.directoryURL = URL(fileURLWithPath: "/Applications") }
+            dialog.beginSheetModal(for: panel) { [weak self] response in
+                guard response == .OK, let url = dialog.url,
+                      let data = try? JSONSerialization.data(withJSONObject: ["kind": kind, "path": url.path]),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                self?.web.evaluateJavaScript("window.momoDesktop?.selectedTool(\(json))", completionHandler: nil)
+            }
         case "openExternal":
             let allowedHosts = ["github.com", "www.npmjs.com", "formulae.brew.sh", "code.claude.com", "developers.openai.com", "learn.chatgpt.com", "opencode.ai", "bun.sh", "bun.com", "geminicli.com", "docs.x.ai"]
             if let value = body["url"] as? String, let url = URL(string: value), url.scheme == "https", allowedHosts.contains(url.host ?? "") { NSWorkspace.shared.open(url) }

@@ -124,3 +124,5 @@ body{background-color:#f5f0e9;background-image:radial-gradient(#dfd4c6 .7px,tran
   .monitor-screen .bottom{padding-top:8px}
   .monitor-screen .back{margin:0 0 8px}
 }
+
+.connection-list{margin-top:14px}.connection-list .connection-option .small{overflow-wrap:anywhere;line-height:1.5}.binding-manual{font-size:12px;margin:16px 0}.binding-manual summary{cursor:pointer;color:var(--muted)}.binding-manual .secondary{margin:10px 8px 0 0}.binding-manual form{display:grid;gap:8px;margin-top:12px}

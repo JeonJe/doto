@@ -26,7 +26,7 @@ fi
 lipo "$runtime_node" -verify_arch "$architecture"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources/web" "$app_dir/Contents/Resources/runtime"
 cp "$prototype_root/macos/Info.plist" "$app_dir/Contents/Info.plist"
-for asset in server.mjs inventory.mjs app.js index.html style.css pet.svg; do
+for asset in server.mjs inventory.mjs local-tools.mjs app.js index.html style.css pet.svg; do
   cp "$prototype_root/$asset" "$app_dir/Contents/Resources/web/$asset"
 done
 cp "$runtime_node" "$app_dir/Contents/Resources/runtime/node"

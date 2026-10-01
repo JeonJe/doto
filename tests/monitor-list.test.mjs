@@ -156,3 +156,16 @@ test('연결되지 않은 GitHub 상세는 설치 최신 상태가 아닌 릴리
  const html=run('ui.detail="repo";ui.view="detail";render();$("screen").innerHTML');
  assert.match(html,/릴리스 소식 구독/);assert.match(html,/최근 릴리스/);assert.doesNotMatch(html,/새 버전이 없어요/);
 });
+
+test('공통 연결 화면은 설치 후보를 검색하고 5개씩 탐색하며 구독을 명시적으로 선택',()=>{
+ const run=harness([]);
+ const html=run('ui.connections=Array.from({length:7},(_,i)=>({name:"Tool "+i,caption:"/Applications/Tool "+i+".app",binding:{kind:"app"}}));ui.view="connect";render();$("screen").innerHTML');
+ assert.equal((html.match(/data-connect-index=/g)||[]).length,5);assert.match(html,/소식만 구독/);
+ assert.equal((run('ui.connectionPage=2;render();$("screen").innerHTML').match(/data-connect-index=/g)||[]).length,2);
+ assert.match(run('ui.connectionQuery="없는 도구";render();$("screen").innerHTML'),/찾는 설치 도구가 없어요/);
+});
+test('직접 연결한 앱은 중복된 위치 선택 대신 연결 변경만 제공',()=>{
+ const run=harness([{id:'app',name:'Novel',source:'github',target:'example/novel',version:'v2.0.0',installedVersion:'1.0.0',status:'ok',hours:6,localBinding:{kind:'app'},localApp:'Novel',selectedLocationId:'app:/Applications/Novel.app',installLocations:[{id:'app:/Applications/Novel.app',path:'/Applications/Novel.app',version:'1.0.0'}],update:{before:'1.0.0',version:'v2.0.0'}}]);
+ const html=run('ui.detail="app";ui.view="detail";render();$("screen").innerHTML');
+ assert.match(html,/data-action="connect-existing"/);assert.doesNotMatch(html,/data-action="location-select"/);assert.match(html,/업데이트는 해당 도구에서/);
+});
